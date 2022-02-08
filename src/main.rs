@@ -10,7 +10,7 @@ use std::process::{Command, Stdio};
 const DOCKER_BIN: &str = "docker";
 const DOCKER_IMGS_CMD: [&str; 1] = ["images"];
 const DOCKER_FORMAT_ARGS: [&str; 2] = ["--format", "{{json .}}"];
-const DOCKER_RMI_CMD: [&str; 2] = ["rmi", "-f"];
+const DOCKER_RMI_CMD: [&str; 1] = ["rmi"];
 const DAYS_RM: u32 = 2;
 
 /// Clear docker images from
@@ -97,16 +97,17 @@ fn main() {
         println!("dry run activated");
     } else {
         let mut cmd = Command::new(DOCKER_BIN);
+        cmd.args(DOCKER_RMI_CMD);
+
         if args.force {
-            cmd.arg("-f");
+            cmd.arg("--force");
         }
 
-        match cmd
-            .args(DOCKER_RMI_CMD)
-            .args(&ids)
-            .stdout(Stdio::null())
-            .status()
-        {
+        if ids.len() == 0 {
+            return println!("nothing to do...");
+        }
+
+        match cmd.args(&ids).stdout(Stdio::null()).status() {
             Ok(s) => {
                 if !s.success() {
                     eprintln!("failed to delete images. Please checkout STDERR")
