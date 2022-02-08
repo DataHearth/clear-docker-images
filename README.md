@@ -4,6 +4,8 @@
 
 ## Usage
 
+By default (it will change in the futur), `clear-docker-images` will select images that are older than 2 days old. You can choose to customize which repository will be selected and if specific tags should be ignored.
+
 ### Docker container
 
 ```bash
@@ -39,4 +41,4 @@ clear-docker-images <OPTIONS>
 `-h, --help` : Print help information  
 `-r, --repository <REPOSITORY>` : filter by repository name  
 `-t, --tags <TAGS>` : add tags exclusion  
-`-V, --version` : Print version information  
+`-V, --version` : Print version information
