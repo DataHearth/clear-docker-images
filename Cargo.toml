@@ -3,8 +3,10 @@ name = "clear-docker-images"
 version = "0.2.0"
 edition = "2021"
 authors = ["Antoine <DataHearth> Langlois"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "small binary to clean old docker images (mostly in CI)"
+repository = "https://github.com/DataHearth/clear-docker-images"
+homepage = "https://github.com/DataHearth/clear-docker-images"
+readme = "README.md"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
