@@ -11,23 +11,21 @@ use std::{
 };
 
 const DOCKER_BIN: &str = "docker";
-const DOCKER_IMGS_CMD: [&str; 1] = ["images"];
-const DOCKER_FORMAT_ARGS: [&str; 2] = ["--format", "{{json .}}"];
-const DOCKER_RMI_CMD: [&str; 1] = ["rmi"];
-const DAYS_RM: u32 = 2;
 
 /// Clear docker images from
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    #[clap(short, long, takes_value = false)]
-    verbose: bool,
+    /// filter by repository name (ISO 8601) [default: $NOW - 2 days]
+    #[clap(short, long)]
+    date: Option<DateTime<Utc>>,
 
     /// filter by repository name
     #[clap(short, long)]
     repository: Option<String>,
 
     /// add tags exclusion
+    /// Example: -t 1.1.0 -t release
     #[clap(short, long)]
     tags: Option<Vec<String>>,
 
@@ -38,6 +36,10 @@ struct Args {
     /// should docker force image removal (it may create orphan images)
     #[clap(long, takes_value = false)]
     force: bool,
+
+    /// add more logs
+    #[clap(short, long, takes_value = false)]
+    verbose: bool,
 }
 
 #[derive(Deserialize, Debug)]
@@ -55,26 +57,7 @@ struct Image {
 fn main() {
     let args = Args::parse();
 
-    let mut cmd = Command::new(DOCKER_BIN);
-    cmd.args(DOCKER_IMGS_CMD);
-
-    if let Some(repo) = args.repository {
-        cmd.arg(repo);
-    }
-
-    cmd.args(DOCKER_FORMAT_ARGS);
-
-    let stdout = match cmd.output() {
-        Ok(o) => {
-            if !o.status.success() {
-                eprintln!("{}", std::str::from_utf8(&o.stderr).unwrap());
-                return eprintln!("failed to retrieve docker images. Please checkout STDERR");
-            }
-
-            o.stdout
-        }
-        Err(e) => return eprintln!("docker command failed: {}", e),
-    };
+    let stdout = get_images(args.repository);
 
     let s_data = std::str::from_utf8(&stdout).unwrap();
     let mut images: Vec<&str> = s_data.split("\n").collect();
@@ -87,7 +70,12 @@ fn main() {
     }
 
     let now = Utc::now();
-    let past_date = get_past_date(now.year(), now.month(), now.day(), DAYS_RM).and_hms(1, 0, 0);
+    let past_date = if let Some(date) = args.date {
+        date
+    } else {
+        get_past_date(now.year(), now.month(), now.day(), 2).and_hms(1, 0, 0)
+    };
+
     let tags = if let Some(t) = args.tags { t } else { vec![] };
     let mut ids = vec![];
     let mut saved_size: f32 = 0.0;
@@ -130,7 +118,7 @@ fn main() {
         println!("dry run activated");
     } else {
         let mut cmd = Command::new(DOCKER_BIN);
-        cmd.args(DOCKER_RMI_CMD);
+        cmd.arg("rmi");
 
         if args.force {
             println!("\"--force\" flag set");
@@ -169,6 +157,33 @@ fn main() {
             format!("{:.2}MB", saved_size)
         }
     );
+}
+
+fn get_images(repo: Option<String>) -> Vec<u8> {
+    let mut cmd = Command::new(DOCKER_BIN);
+    cmd.arg("images");
+
+    if let Some(repo) = repo {
+        cmd.arg(repo);
+    }
+
+    cmd.args(["--format", "{{json .}}"]);
+
+    match cmd.output() {
+        Ok(o) => {
+            if !o.status.success() {
+                eprintln!("{}", std::str::from_utf8(&o.stderr).unwrap());
+                eprintln!("failed to retrieve docker images. Please checkout STDERR");
+                exit(1);
+            }
+
+            o.stdout
+        }
+        Err(e) => {
+            eprintln!("docker command failed: {}", e);
+            exit(1);
+        }
+    }
 }
 
 fn failed_convert_size(e: ParseFloatError) -> f32 {
