@@ -1,8 +1,6 @@
 use chrono::{Date, DateTime, FixedOffset, NaiveDate, TimeZone, Utc};
 use serde::{self, Deserialize, Deserializer};
-
-// * format => 2021-01-01 00:00:00 +0100 CET
-const FORMAT: &str = "%Y-%m-%d %H:%M:%S %z %Z";
+use std::{num::TryFromIntError, process::exit};
 
 pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<FixedOffset>, D::Error>
 where
@@ -10,7 +8,8 @@ where
 {
     let s = String::deserialize(deserializer)?;
 
-    DateTime::parse_from_str(&s, FORMAT).map_err(serde::de::Error::custom)
+    // * format => 2021-01-01 00:00:00 +0100 CET
+    DateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S %z %Z").map_err(serde::de::Error::custom)
 }
 
 fn get_day_month(year: i32, month: u32) -> u32 {
@@ -25,7 +24,10 @@ fn get_day_month(year: i32, month: u32) -> u32 {
         date.signed_duration_since(NaiveDate::from_ymd(year, month, 1))
             .num_days(),
     )
-    .expect("failed to convert i64 to u32")
+    .unwrap_or_else(|_: TryFromIntError| {
+        eprintln!("failed to convert i64 to u32");
+        exit(1);
+    })
 }
 
 pub fn get_past_date(mut year: i32, mut month: u32, mut day: u32, day_remove: u32) -> Date<Utc> {
@@ -41,7 +43,10 @@ pub fn get_past_date(mut year: i32, mut month: u32, mut day: u32, day_remove: u3
         day = match day {
             2 => new_day,
             1 => new_day - 1,
-            _ => panic!("invalid day in condition..."),
+            _ => {
+                eprintln!("invalid day in condition...");
+                exit(1)
+            }
         }
     } else {
         day -= day_remove;
