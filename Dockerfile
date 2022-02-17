@@ -3,20 +3,16 @@ FROM rust:1.58 as builder
 WORKDIR /app
 COPY . .
 
-RUN cargo install --path .
+RUN rustup target add x86_64-unknown-linux-musl
+RUN cargo build --release --target x86_64-unknown-linux-musl
 
-FROM debian:buster-slim
+FROM docker:20.10.12-dind-alpine3.15
 
 LABEL maintainer="Antoine <DataHearth> Langlois"
 LABEL repository="https://github.com/DataHearth/clear-docker-images"
 LABEL org.opencontainers.image.source=&quot;https://github.com/DataHearth/clear-docker-images&quot;
 
-RUN apt-get update && \
-  # apt-get -qy full-upgrade && \
-  apt-get install -qy curl && \
-  curl -sSL https://get.docker.com/ | sh
-
-COPY --from=builder /usr/local/cargo/bin/clear-docker-images /usr/local/bin/clear-docker-images
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/clear-docker-images /usr/local/bin/clear-docker-images
 
 VOLUME ["/var/run/docker.sock"]
 
