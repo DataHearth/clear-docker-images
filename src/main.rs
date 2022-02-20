@@ -1,6 +1,6 @@
 mod date;
 
-use chrono::{DateTime, Datelike, FixedOffset, Utc};
+use chrono::{DateTime, Datelike, FixedOffset, NaiveDateTime, Utc};
 use clap::Parser;
 use date::get_past_date;
 use serde::Deserialize;
@@ -16,28 +16,29 @@ const DOCKER_BIN: &str = "docker";
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// filter by repository name (ISO 8601) [default: $NOW - 2 days]
+    /// filter by date.
+    ///
+    /// Can filter by a minimum age $DATE or from $FROM|$TO (%Y-%m-%dT%H:%M:%S%Z) [default: $NOW - 2 days]
     #[clap(short, long)]
-    date: Option<DateTime<Utc>>,
+    date: Option<String>,
 
     /// filter by repository name
     #[clap(short, long)]
     repository: Option<String>,
 
     /// add tags exclusion
-    /// Example: -t 1.1.0 -t release
     #[clap(short, long)]
     tags: Option<Vec<String>>,
 
-    /// image cleanup will not be triggered
+    /// image cleanup will not be triggered [default: false]
     #[clap(long, takes_value = false)]
     dry_run: bool,
 
-    /// should docker force image removal (it may create orphan images)
+    /// force image removal [default: false]
     #[clap(long, takes_value = false)]
     force: bool,
 
-    /// add more logs
+    /// add more logs [default: false]
     #[clap(short, long, takes_value = false)]
     verbose: bool,
 }
@@ -69,11 +70,59 @@ fn main() {
         return;
     }
 
+    let min: DateTime<Utc>;
+    let mut max_opt: Option<DateTime<Utc>> = None;
     let now = Utc::now();
-    let past_date = if let Some(date) = args.date {
-        date
+    if let Some(date) = args.date {
+        if date.contains("|") {
+            let dates: Vec<&str> = date.split("|").collect();
+            let base_from = if dates[0].contains("T") {
+                dates[0].to_string()
+            } else {
+                format!("{}T00:00:00", dates[0])
+            };
+            let base_to = if dates[1].contains("T") {
+                dates[1].to_string()
+            } else {
+                format!("{}T00:00:00", dates[1])
+            };
+
+            let base_from = NaiveDateTime::parse_from_str(&base_from, "%FT%T").unwrap_or_else(|e| {
+                eprintln!(
+                    "failed to parse from date. Verify its format (example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS): {}",
+                    e
+                );
+                exit(1);
+            });
+            let base_to = NaiveDateTime::parse_from_str(&base_to, "%FT%T").unwrap_or_else(|e| {
+                eprintln!(
+                    "failed to parse to date. Verify its format (example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS): {}",
+                    e
+                );
+                exit(1);
+            });
+            min = DateTime::<Utc>::from_utc(base_from, Utc);
+            max_opt = Some(DateTime::<Utc>::from_utc(base_to, Utc));
+        } else {
+            let formatted_date = if date.contains("T") {
+                date
+            } else {
+                date + "T00:00:00"
+            };
+
+            let date = NaiveDateTime::parse_from_str(&formatted_date, "%FT%T")
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                    "failed to parse date. Verify its format (example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS): {}",
+                    e
+                );
+                    exit(1);
+                });
+
+            min = DateTime::<Utc>::from_utc(date, Utc);
+        }
     } else {
-        get_past_date(now.year(), now.month(), now.day(), 2).and_hms(1, 0, 0)
+        min = get_past_date(now.year(), now.month(), now.day(), 2).and_hms(1, 0, 0);
     };
 
     let tags = if let Some(t) = args.tags { t } else { vec![] };
@@ -82,7 +131,24 @@ fn main() {
 
     for img in images {
         let image: Image = serde_json::from_str(img).unwrap();
-        if image.created_at.timestamp() <= past_date.timestamp() {
+        let del;
+        if let Some(max) = max_opt {
+            del = if image.created_at.timestamp() <= min.timestamp()
+                && image.created_at.timestamp() >= max.timestamp()
+            {
+                true
+            } else {
+                false
+            }
+        } else {
+            del = if image.created_at.timestamp() <= min.timestamp() {
+                true
+            } else {
+                false
+            }
+        }
+
+        if del {
             if !tags.contains(&image.tag) {
                 ids.push(image.id);
 
