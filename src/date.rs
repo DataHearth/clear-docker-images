@@ -1,4 +1,4 @@
-use chrono::{Date, DateTime, FixedOffset, NaiveDate, TimeZone, Utc};
+use chrono::{Date, DateTime, Datelike, FixedOffset, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use serde::{self, Deserialize, Deserializer};
 use std::{num::TryFromIntError, process::exit};
 
@@ -53,4 +53,61 @@ pub fn get_past_date(mut year: i32, mut month: u32, mut day: u32, day_remove: u3
     }
 
     Utc.from_utc_date(&NaiveDate::from_ymd(year, month, day))
+}
+
+pub fn parse_date(date: Option<String>) -> (DateTime<Utc>, Option<DateTime<Utc>>) {
+    let from: DateTime<Utc>;
+    let mut to: Option<DateTime<Utc>> = None;
+
+    if let Some(d) = date {
+        if d.contains("|") {
+            let dates: Vec<&str> = d.split("|").collect();
+            let base_from = if dates[0].contains("T") {
+                dates[0].to_string()
+            } else {
+                format!("{}T00:00:00", dates[0])
+            };
+            let base_to = if dates[1].contains("T") {
+                dates[1].to_string()
+            } else {
+                format!("{}T00:00:00", dates[1])
+            };
+
+            let base_from = NaiveDateTime::parse_from_str(&base_from, "%FT%T").unwrap_or_else(|e| {
+                eprintln!(
+                    "failed to parse from date. Verify its format (example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS): {}",
+                    e
+                );
+                exit(1);
+            });
+            let base_to = NaiveDateTime::parse_from_str(&base_to, "%FT%T").unwrap_or_else(|e| {
+                eprintln!(
+                    "failed to parse to date. Verify its format (example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS): {}",
+                    e
+                );
+                exit(1);
+            });
+            from = DateTime::<Utc>::from_utc(base_from, Utc);
+            to = Some(DateTime::<Utc>::from_utc(base_to, Utc));
+        } else {
+            let formatted_date = if d.contains("T") { d } else { d + "T00:00:00" };
+
+            let date = NaiveDateTime::parse_from_str(&formatted_date, "%FT%T")
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                    "failed to parse date. Verify its format (example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS): {}",
+                    e
+                );
+                    exit(1);
+                });
+
+            from = DateTime::<Utc>::from_utc(date, Utc);
+        }
+    } else {
+        let now = Utc::now();
+
+        from = get_past_date(now.year(), now.month(), now.day(), 2).and_hms(1, 0, 0);
+    };
+
+    return (from, to);
 }
