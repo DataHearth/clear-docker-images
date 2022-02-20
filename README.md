@@ -1,10 +1,10 @@
 # clear-docker-images
 
-`clear-docker-images` is a small rust binary made to cleanup old docker images but date, repository and tags.
+`clear-docker-images` is a small rust binary made to cleanup old docker images by date, repository and tags.
 
 ## Usage
 
-By default (it will change in the futur), `clear-docker-images` will select images that are older than 2 days old by default. You can choose to customize its behavior by filtering by repository, tags and from a specific date.
+By default, `clear-docker-images` will select images that are older than 2 days old. You can choose to customize its behavior by filtering a different date by passing 1 or 2 dates, a repository and tags.
 
 ### Docker container
 
@@ -37,12 +37,30 @@ clear-docker-images <OPTIONS>
 ## Flags
 
 ```bash
-  -d, --date <DATE>                filter by repository name (ISO 8601) [default: $NOW - 2 days]
-      --dry-run                    image cleanup will not be triggered
-      --force                      should docker force image removal (it may create orphan images)
-  -h, --help                       Print help information
-  -r, --repository <REPOSITORY>    filter by repository name
-  -t, --tags <TAGS>                add tags exclusion Example: -t 1.1.0 -t release
-  -v, --verbose                    add more logs
-  -V, --version                    Print version information
+  -d, --date <DATE>
+          filter by date.
+
+          Can filter by a minimum age $DATE or from $FROM|$TO (format example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+          [default: $NOW - 2 days]
+
+      --dry-run
+          image cleanup will not be triggered [default: false]
+
+      --force
+          force image removal [default: false]
+
+  -h, --help
+          Print help information
+
+  -r, --repository <REPOSITORY>
+          filter by repository name
+
+  -t, --tags <TAGS>
+          add tags exclusion
+
+  -v, --verbose
+          add more logs [default: false]
+
+  -V, --version
+          Print version information
 ```
