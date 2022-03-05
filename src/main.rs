@@ -3,6 +3,7 @@ mod images;
 
 use clap::Parser;
 use std::process::{Command, Stdio};
+use log::{error, info};
 
 use crate::images::process_imgs;
 
@@ -46,41 +47,41 @@ fn main() {
     let (ids, saved_size) = process_imgs(args.repository, tags, args.date);
 
     if args.dry_run {
-        println!("dry run activated");
+        info!("dry run activated");
     } else {
         let mut cmd = Command::new(DOCKER_BIN);
         cmd.arg("rmi");
 
         if args.force {
-            println!("\"--force\" flag set");
+            info!("\"--force\" flag set");
             cmd.arg("--force");
         }
 
         if ids.len() == 0 {
-            println!("nothing to do...");
+            info!("nothing to do...");
             return;
         }
 
         if args.verbose {
-            println!("trigger \"docker rmi\" command");
+            info!("trigger \"docker rmi\" command");
         }
 
         match cmd.args(&ids).stdout(Stdio::null()).status() {
             Ok(s) => {
                 if !s.success() {
-                    eprintln!("failed to delete images. Please checkout STDERR")
+                    error!("failed to delete images. Please checkout STDERR")
                 }
 
-                println!("images deleted!")
+                info!("images deleted!")
             }
-            Err(e) => eprintln!("docker command failed: {}", e),
+            Err(e) => error!("docker command failed: {}", e),
         };
     }
 
     if args.verbose || args.dry_run {
-        println!("deleted images: {:#?}", ids);
+        info!("deleted images: {:#?}", ids);
     }
-    println!(
+    info!(
         "Total disk space saved: {}",
         if saved_size / 1000 as f32 > 1 as f32 {
             format!("{:.2}GB", saved_size / 1000.0)

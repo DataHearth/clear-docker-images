@@ -1,4 +1,5 @@
 use chrono::{DateTime, FixedOffset};
+use log::{error, warn};
 use serde::Deserialize;
 use std::{
     num::ParseFloatError,
@@ -64,7 +65,7 @@ pub fn process_imgs(
                         .unwrap_or_else(failed_convert_size)
                         * 1000 as f32
                 } else {
-                    eprintln!("Unknown size identification: {}", image.size);
+                    error!("Unknown size identification: {}", image.size);
                     exit(1);
                 }
             }
@@ -85,18 +86,18 @@ fn get_images(repo: Option<String>) -> Vec<u8> {
     match cmd.output() {
         Ok(o) => {
             if !o.status.success() {
-                eprintln!(
+                error!(
                     "{}",
                     std::str::from_utf8(&o.stderr).expect("failed to parse STDERR to UTF-8")
                 );
-                eprintln!("failed to retrieve docker images. Please checkout STDERR");
+                error!("failed to retrieve docker images. Please checkout STDERR");
                 exit(1);
             }
 
             o.stdout
         }
         Err(e) => {
-            eprintln!("docker command failed: {}", e);
+            error!("docker command failed: {}", e);
             exit(1);
         }
     }
@@ -106,7 +107,7 @@ fn parse_imgs(repository: Option<String>) -> Vec<String> {
     let stdout = get_images(repository);
 
     let output = String::from_utf8(stdout).unwrap_or_else(|e| {
-        eprintln!("failed to parse docker output: {}", e);
+        error!("failed to parse docker output: {}", e);
         exit(1);
     });
     let mut images: Vec<String> = output.lines().map(|s| s.to_string()).collect();
@@ -114,7 +115,7 @@ fn parse_imgs(repository: Option<String>) -> Vec<String> {
     images.remove(images.len() - 1);
 
     if images.len() == 0 {
-        println!("No images found for current timestamp and/or repository");
+        warn!("No images found for current timestamp and/or repository");
         exit(1);
     }
 
@@ -122,6 +123,6 @@ fn parse_imgs(repository: Option<String>) -> Vec<String> {
 }
 
 fn failed_convert_size(e: ParseFloatError) -> f32 {
-    eprintln!("failed to convert \"String\" to \"f32\": {}", e);
+    error!("failed to convert \"String\" to \"f32\": {}", e);
     exit(1);
 }
