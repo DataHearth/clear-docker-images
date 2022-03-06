@@ -6,14 +6,24 @@ use std::process::{exit, Command};
 use crate::DateArgs;
 use crate::DOCKER_BIN;
 
+const GHCR_REPO: &str = "ghcr.io/datahearth/clear-docker-images";
+const DOCKER_REPO: &str = "datahearth/clear-docker-images";
+
 #[derive(Deserialize, Debug)]
 struct Image {
-    #[serde(deserialize_with = "deserialize_creation_date", rename = "CreatedAt")]
-    created_at: i64,
+    // image ID
     #[serde(rename = "ID")]
     id: String,
+    // image repository
+    #[serde(rename = "Repository")]
+    repository: String,
+    // image tag
     #[serde(rename = "Tag")]
     tag: String,
+    // image creation date as UNIX timestamp
+    #[serde(deserialize_with = "deserialize_creation_date", rename = "CreatedAt")]
+    created_at: i64,
+    // image size in MB
     #[serde(deserialize_with = "deserialize_size", rename = "Size")]
     size: f32,
 }
@@ -78,7 +88,7 @@ pub fn process_imgs(
                 timestamps.start > image.created_at && stop < image.created_at
             });
 
-        if del {
+        if del && (image.repository != GHCR_REPO && image.repository != DOCKER_REPO) {
             if !tags.contains(&image.tag) {
                 ids.push(image.id);
 
