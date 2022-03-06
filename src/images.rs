@@ -1,4 +1,4 @@
-use chrono::DateTime;
+use chrono::NaiveDateTime;
 use log::{error, warn};
 use serde::{self, Deserialize, Deserializer};
 use std::process::{exit, Command};
@@ -35,7 +35,7 @@ where
     let date = String::deserialize(deserializer)?;
 
     // format => 2021-01-01 00:00:00 +0100 CET
-    DateTime::parse_from_str(&date, "%Y-%m-%d %H:%M:%S %z %Z")
+    NaiveDateTime::parse_from_str(&date, "%Y-%m-%d %H:%M:%S %z %Z")
         .map(|d| d.timestamp())
         .map_err(serde::de::Error::custom)
 }
@@ -81,11 +81,7 @@ pub fn process_imgs(
         let del = timestamps
             .stop
             .map_or(timestamps.start > image.created_at, |stop| {
-                println!(
-                    "stop date set, valid: {}",
-                    timestamps.start > image.created_at && stop < image.created_at
-                );
-                timestamps.start > image.created_at && stop < image.created_at
+                timestamps.start > image.created_at && image.created_at > stop
             });
 
         if del && (image.repository != GHCR_REPO && image.repository != DOCKER_REPO) {
