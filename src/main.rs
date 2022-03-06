@@ -17,12 +17,11 @@ const TWO_DAYS_TIMESTAMP: i64 = 172_800;
 struct Args {
     /// filter by date.
     ///
-    /// Can filter by a minimum age $DATE or from $START|$STOP (format example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS) [default: $NOW - 2 days]
+    /// Can filter by a minimum age $DATE or from $START|$STOP (format example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS) [default: $NOW - 2d]
     #[clap(short, long, parse(try_from_str = parse_user_date))]
-    date: DateArgs,
+    date: Option<DateArgs>,
 
     /// filter by repository name
-    #[clap(short, long)]
     repository: Option<String>,
 
     /// add tags exclusion
@@ -49,15 +48,30 @@ pub struct DateArgs {
 }
 
 fn main() {
-    if SimpleLogger::new().init().is_err() {
-        eprintln!("failed to initialize logger");
+    let args = Args::parse();
+    let logger = SimpleLogger::new()
+        .without_timestamps()
+        .with_level(match args.verbose {
+            true => log::LevelFilter::Debug,
+            false => log::LevelFilter::Info,
+        });
+
+    if let Some(e) = logger.init().err() {
+        eprintln!("failed to initialize logger: {}", e);
         exit(1);
     }
 
-    let args = Args::parse();
-
-    let tags = args.tags.map_or(vec![], |tags| tags);
-    let (ids, saved_size) = process_imgs(args.repository, tags, args.date);
+    let (ids, saved_size) = process_imgs(
+        args.repository,
+        args.tags.map_or(vec![], |tags| tags),
+        args.date.map_or(
+            DateArgs {
+                start: Utc::now().timestamp() - TWO_DAYS_TIMESTAMP,
+                stop: None,
+            },
+            |d| d,
+        ),
+    );
 
     if args.dry_run {
         info!("dry run activated");
@@ -91,12 +105,12 @@ fn main() {
         };
     }
 
-    if args.verbose || args.dry_run {
+    if args.dry_run {
         info!("deleted images: {:#?}", ids);
     }
     info!(
         "Total disk space saved: {}",
-        if saved_size / 1000 as f32 > 1 as f32 {
+        if saved_size / 1000.0 > 1.0 {
             format!("{:.2}GB", saved_size / 1000.0)
         } else {
             format!("{:.2}MB", saved_size)

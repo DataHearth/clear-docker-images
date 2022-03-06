@@ -49,7 +49,7 @@ where
     if size.contains("KB") {
         size.replace("KB", "")
             .parse::<f32>()
-            .map(|s| s / 1000 as f32)
+            .map(|s| s / 1000.0)
             .map_err(serde::de::Error::custom)
     } else if size.contains("MB") {
         size.replace("MB", "")
@@ -58,7 +58,7 @@ where
     } else if size.contains("GB") {
         size.replace("GB", "")
             .parse::<f32>()
-            .map(|s| s * 1000 as f32)
+            .map(|s| s * 1000.0)
             .map_err(serde::de::Error::custom)
     } else {
         Err(serde::de::Error::custom(format!(
@@ -131,13 +131,10 @@ fn parse_imgs(repository: Option<String>) -> Vec<String> {
         error!("failed to parse docker output: {}", e);
         exit(1);
     });
-    let mut images: Vec<String> = output.lines().map(|s| s.to_string()).collect();
-    // * remove last empty line
-    images.remove(images.len() - 1);
+    let images: Vec<String> = output.lines().map(|s| s.to_string()).collect();
 
     if images.len() == 0 {
         warn!("No images found for current timestamp and/or repository");
-        exit(1);
     }
 
     return images;

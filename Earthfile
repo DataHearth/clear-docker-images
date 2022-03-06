@@ -10,8 +10,15 @@ WORKDIR /clear-docker-images
 
 build-linux:
   COPY . .
+  RUN rustup target add x86_64-unknown-linux-gnu
 	RUN cargo build --release --target x86_64-unknown-linux-gnu
   SAVE ARTIFACT target/x86_64-unknown-linux-gnu /x86_64-unknown-linux-gnu AS LOCAL target/x86_64-unknown-linux-gnu
+
+build-musl:
+  COPY . .
+  RUN rustup target add x86_64-unknown-linux-musl
+	RUN cargo build --release --target x86_64-unknown-linux-musl
+  SAVE ARTIFACT target/x86_64-unknown-linux-musl /x86_64-unknown-linux-musl AS LOCAL target/x86_64-unknown-linux-musl
 
 build-images:
   FROM docker:20.10.12-dind-alpine3.15
@@ -20,7 +27,7 @@ build-images:
   LABEL repository="https://github.com/DataHearth/clear-docker-images"
   LABEL org.opencontainers.image.source=&quot;https://github.com/DataHearth/clear-docker-images&quot;
 
-  COPY +build-linux/x86_64-unknown-linux-gnu /usr/local/bin/clear-docker-images
+  COPY +build-musl/x86_64-unknown-linux-musl/release/clear-docker-images /usr/local/bin/clear-docker-images
 
   VOLUME ["/var/run/docker.sock"]
 
