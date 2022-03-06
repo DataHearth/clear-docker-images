@@ -1,73 +1,88 @@
-use chrono::{DateTime, FixedOffset};
+use chrono::DateTime;
 use log::{error, warn};
-use serde::Deserialize;
-use std::{
-    num::ParseFloatError,
-    process::{exit, Command},
-};
+use serde::{self, Deserialize, Deserializer};
+use std::process::{exit, Command};
 
-use crate::date;
+use crate::DateArgs;
 use crate::DOCKER_BIN;
 
 #[derive(Deserialize, Debug)]
 struct Image {
-    #[serde(with = "date", rename = "CreatedAt")]
-    created_at: DateTime<FixedOffset>,
+    #[serde(deserialize_with = "deserialize_creation_date", rename = "CreatedAt")]
+    created_at: i64,
     #[serde(rename = "ID")]
     id: String,
     #[serde(rename = "Tag")]
     tag: String,
-    #[serde(rename = "Size")]
-    size: String,
+    #[serde(deserialize_with = "deserialize_size", rename = "Size")]
+    size: f32,
+}
+
+pub fn deserialize_creation_date<'de, D>(deserializer: D) -> Result<i64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let date = String::deserialize(deserializer)?;
+
+    // format => 2021-01-01 00:00:00 +0100 CET
+    DateTime::parse_from_str(&date, "%Y-%m-%d %H:%M:%S %z %Z")
+        .map(|d| d.timestamp())
+        .map_err(serde::de::Error::custom)
+}
+
+pub fn deserialize_size<'de, D>(deserializer: D) -> Result<f32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let size = String::deserialize(deserializer)?;
+
+    if size.contains("KB") {
+        size.replace("KB", "")
+            .parse::<f32>()
+            .map(|s| s / 1000 as f32)
+            .map_err(serde::de::Error::custom)
+    } else if size.contains("MB") {
+        size.replace("MB", "")
+            .parse::<f32>()
+            .map_err(serde::de::Error::custom)
+    } else if size.contains("GB") {
+        size.replace("GB", "")
+            .parse::<f32>()
+            .map(|s| s * 1000 as f32)
+            .map_err(serde::de::Error::custom)
+    } else {
+        Err(serde::de::Error::custom(format!(
+            "Unknown size identification: {}",
+            size,
+        )))
+    }
 }
 
 pub fn process_imgs(
     repository: Option<String>,
     tags: Vec<String>,
-    date: Option<String>,
+    timestamps: DateArgs,
 ) -> (Vec<String>, f32) {
-    let (date_from, date_to) = date::parse_date(date);
     let mut ids = vec![];
-    let mut saved_size: f32 = 0.0;
+    let mut saved_size = 0.0;
 
     for img in parse_imgs(repository) {
         let image: Image = serde_json::from_str(&img).unwrap();
-        let del = date_to.map_or(
-            image.created_at.timestamp() >= date_from.timestamp(),
-            |max| {
-                date_from.timestamp() >= image.created_at.timestamp()
-                    && max.timestamp() <= image.created_at.timestamp()
-            },
-        );
+        let del = timestamps
+            .stop
+            .map_or(timestamps.start > image.created_at, |stop| {
+                println!(
+                    "stop date set, valid: {}",
+                    timestamps.start > image.created_at && stop < image.created_at
+                );
+                timestamps.start > image.created_at && stop < image.created_at
+            });
 
         if del {
             if !tags.contains(&image.tag) {
                 ids.push(image.id);
 
-                saved_size += if image.size.contains("KB") {
-                    image
-                        .size
-                        .replace("KB", "")
-                        .parse::<f32>()
-                        .unwrap_or_else(failed_convert_size)
-                        / 1000 as f32
-                } else if image.size.contains("MB") {
-                    image
-                        .size
-                        .replace("MB", "")
-                        .parse::<f32>()
-                        .unwrap_or_else(failed_convert_size)
-                } else if image.size.contains("GB") {
-                    image
-                        .size
-                        .replace("GB", "")
-                        .parse::<f32>()
-                        .unwrap_or_else(failed_convert_size)
-                        * 1000 as f32
-                } else {
-                    error!("Unknown size identification: {}", image.size);
-                    exit(1);
-                }
+                saved_size += image.size
             }
         }
     }
@@ -120,9 +135,4 @@ fn parse_imgs(repository: Option<String>) -> Vec<String> {
     }
 
     return images;
-}
-
-fn failed_convert_size(e: ParseFloatError) -> f32 {
-    error!("failed to convert \"String\" to \"f32\": {}", e);
-    exit(1);
 }
