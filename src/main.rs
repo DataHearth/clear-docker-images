@@ -31,10 +31,6 @@ struct Args {
     #[clap(long, takes_value = false)]
     dry_run: bool,
 
-    /// add more logs [default: false]
-    #[clap(short, long, takes_value = false)]
-    verbose: bool,
-
     /// where is located the docker socket (can be a UNIX socket or TCP protocol)
     #[clap(short, long, default_value = "/var/run/docker.sock")]
     socket: String,
@@ -51,10 +47,7 @@ async fn main() {
     let args = Args::parse();
     let logger = SimpleLogger::new()
         .without_timestamps()
-        .with_level(match args.verbose {
-            true => log::LevelFilter::Debug,
-            false => log::LevelFilter::Info,
-        });
+        .with_level(log::LevelFilter::Info);
 
     if let Some(e) = logger.init().err() {
         eprintln!("failed to initialize logger: {}", e);
