@@ -4,11 +4,10 @@ use chrono::{NaiveDateTime, Utc};
 use clap::Parser;
 use log::{error, info};
 use simple_logger::SimpleLogger;
-use std::process::{exit, Command, Stdio};
+use std::process::exit;
 
-use crate::images::process_imgs;
+use crate::images::DockerActions;
 
-const DOCKER_BIN: &str = "docker";
 const TWO_DAYS_TIMESTAMP: i64 = 172_800;
 
 /// Clear docker images from
@@ -32,13 +31,13 @@ struct Args {
     #[clap(long, takes_value = false)]
     dry_run: bool,
 
-    /// force image removal [default: false]
-    #[clap(long, takes_value = false)]
-    force: bool,
-
     /// add more logs [default: false]
     #[clap(short, long, takes_value = false)]
     verbose: bool,
+
+    /// where is located the docker socket (can be a UNIX socket or TCP protocol)
+    #[clap(short, long, default_value = "/var/run/docker.sock")]
+    socket: String,
 }
 
 #[derive(Debug)]
@@ -47,7 +46,8 @@ pub struct DateArgs {
     stop: Option<i64>,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Args::parse();
     let logger = SimpleLogger::new()
         .without_timestamps()
@@ -61,9 +61,10 @@ fn main() {
         exit(1);
     }
 
-    let (ids, saved_size) = process_imgs(
+    let actions = DockerActions::new(
+        args.socket,
         args.repository,
-        args.tags.map_or(vec![], |tags| tags),
+        args.tags.map_or(vec![], |t| t),
         args.date.map_or(
             DateArgs {
                 start: Utc::now().timestamp() - TWO_DAYS_TIMESTAMP,
@@ -73,47 +74,28 @@ fn main() {
         ),
     );
 
-    if args.dry_run {
-        info!("dry run activated");
-    } else {
-        let mut cmd = Command::new(DOCKER_BIN);
-        cmd.arg("rmi");
-
-        if args.force {
-            info!("\"--force\" flag set");
-            cmd.arg("--force");
+    let images = match actions.get().await {
+        Ok(i) => i,
+        Err(e) => {
+            error!("failed to retrieve docker images: {}", e);
+            exit(1);
         }
+    };
 
-        if ids.len() == 0 {
-            info!("nothing to do...");
-            return;
+    let saved = match actions.delete(actions.filter(images), args.dry_run).await {
+        Ok(s) => s,
+        Err(e) => {
+            error!("failed to retrieve docker images: {}", e);
+            exit(1);
         }
+    };
 
-        if args.verbose {
-            info!("trigger \"docker rmi\" command");
-        }
-
-        match cmd.args(&ids).stdout(Stdio::null()).status() {
-            Ok(s) => {
-                if !s.success() {
-                    error!("failed to delete images. Please checkout STDERR")
-                }
-
-                info!("images deleted!")
-            }
-            Err(e) => error!("docker command failed: {}", e),
-        };
-    }
-
-    if args.dry_run {
-        info!("deleted images: {:#?}", ids);
-    }
     info!(
         "Total disk space saved: {}",
-        if saved_size / 1000.0 > 1.0 {
-            format!("{:.2}GB", saved_size / 1000.0)
+        if saved / 1000_000 >= 1000 {
+            format!("{:.2}GB", saved as f64 / 1000_000_000.0)
         } else {
-            format!("{:.2}MB", saved_size)
+            format!("{:.2}MB", saved as f32 / 1000_000.0)
         }
     );
 }
