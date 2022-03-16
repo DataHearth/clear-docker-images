@@ -1,4 +1,5 @@
 use bollard::image::ListImagesOptions;
+use bollard::image::RemoveImageOptions;
 use bollard::models::ImageSummary;
 use bollard::Docker;
 use bollard::API_DEFAULT_VERSION;
@@ -6,9 +7,6 @@ use log::info;
 use std::collections::HashMap;
 
 use crate::DateArgs;
-
-const GHCR_REPO: &str = "ghcr.io/datahearth/clear-docker-images";
-const DOCKER_REPO: &str = "datahearth/clear-docker-images";
 
 pub struct DockerActions {
     docker: Docker,
@@ -23,13 +21,15 @@ impl DockerActions {
         repository: Option<String>,
         tags: Vec<String>,
         date: DateArgs,
-    ) -> Self {
-        Self {
-            docker: Docker::connect_with_socket(&socket, 120, API_DEFAULT_VERSION).unwrap(),
+    ) -> Result<Self, bollard::errors::Error> {
+        let docker = Docker::connect_with_socket(&socket, 120, API_DEFAULT_VERSION)?;
+
+        Ok(Self {
+            docker,
             repository,
             tags,
             date,
-        }
+        })
     }
 
     pub async fn get(&self) -> Result<Vec<ImageSummary>, bollard::errors::Error> {
@@ -52,6 +52,7 @@ impl DockerActions {
     pub async fn delete(
         &self,
         images: Vec<ImageSummary>,
+        force: bool,
         dry_run: bool,
     ) -> Result<i64, bollard::errors::Error> {
         let mut removed_size = 0;
@@ -59,7 +60,19 @@ impl DockerActions {
             info!("deleting: {}", image.id);
 
             if !dry_run {
-                if let Err(e) = self.docker.delete_service(&image.id).await {
+                let res = self
+                    .docker
+                    .remove_image(
+                        &image.id,
+                        Some(RemoveImageOptions {
+                            force,
+                            ..Default::default()
+                        }),
+                        None,
+                    )
+                    .await;
+
+                if let Err(e) = res {
                     return Err(e);
                 }
             }
@@ -81,8 +94,8 @@ impl DockerActions {
                     self.date.start > image.created && image.created > stop
                 })
                 && image.repo_tags.iter().any(|tag| {
-                    !tag.contains(GHCR_REPO)
-                        && !tag.contains(DOCKER_REPO)
+                    !tag.contains("ghcr.io/datahearth/clear-docker-images")
+                        && !tag.contains("datahearth/clear-docker-images")
                         && !self
                             .tags
                             .iter()

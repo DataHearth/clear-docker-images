@@ -31,6 +31,10 @@ struct Args {
     #[clap(long, takes_value = false)]
     dry_run: bool,
 
+    /// should force image deletion [default: false]
+    #[clap(short, long, takes_value = false)]
+    force: bool,
+
     /// where is located the docker socket (can be a UNIX socket or TCP protocol)
     #[clap(short, long, default_value = "/var/run/docker.sock")]
     socket: String,
@@ -54,7 +58,7 @@ async fn main() {
         exit(1);
     }
 
-    let actions = DockerActions::new(
+    let actions = match DockerActions::new(
         args.socket,
         args.repository,
         args.tags.map_or(vec![], |t| t),
@@ -65,7 +69,13 @@ async fn main() {
             },
             |d| d,
         ),
-    );
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            error!("failed to connect to docker socket: {}", e);
+            exit(1);
+        }
+    };
 
     let images = match actions.get().await {
         Ok(i) => i,
@@ -75,10 +85,13 @@ async fn main() {
         }
     };
 
-    let saved = match actions.delete(actions.filter(images), args.dry_run).await {
+    let saved = match actions
+        .delete(actions.filter(images), args.force, args.dry_run)
+        .await
+    {
         Ok(s) => s,
         Err(e) => {
-            error!("failed to retrieve docker images: {}", e);
+            error!("failed to delete docker images: {}", e);
             exit(1);
         }
     };
