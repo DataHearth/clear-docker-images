@@ -18,7 +18,7 @@ const DOCKER_BIN: &str = "docker";
 struct Args {
     /// filter by date.
     ///
-    /// Can filter by a minimum age $DATE or from $FROM|$TO (%Y-%m-%dT%H:%M:%S%Z) [default: $NOW - 2 days]
+    /// Can filter by a minimum age $DATE or from $FROM|$TO (format example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS) [default: $NOW - 2 days]
     #[clap(short, long)]
     date: Option<String>,
 
