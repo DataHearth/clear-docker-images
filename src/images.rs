@@ -83,13 +83,12 @@ impl DockerActions {
                 && image.repo_tags.iter().any(|tag| {
                     !tag.contains(GHCR_REPO)
                         && !tag.contains(DOCKER_REPO)
-                        && self
+                        && !self
                             .tags
                             .iter()
-                            .any(|excluded_tag| !tag.contains(excluded_tag))
+                            .any(|excluded_tag| tag.contains(excluded_tag))
                 })
             {
-                println!("{:?}", self.tags);
                 to_be_deleted.push(image);
             }
         }
