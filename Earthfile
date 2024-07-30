@@ -4,7 +4,7 @@ FROM rust:1.59
 
 ARG VERSION
 ARG DOCKER_IMG
-ARG GHCR_IMG
+ARG GITEA_IMG
 
 WORKDIR /clear-docker-images
 
@@ -22,9 +22,9 @@ build-linux:
 build-images:
   FROM gcr.io/distroless/static-debian11
 
-  LABEL maintainer="Antoine <DataHearth> Langlois"
-  LABEL repository="https://github.com/DataHearth/clear-docker-images"
-  LABEL org.opencontainers.image.source=&quot;https://github.com/DataHearth/clear-docker-images&quot;
+  LABEL maintainer="Antoine Langlois <antoine.l@antoine-langlois>"
+  LABEL repository="https://gitea.antoine-langlois.net/DataHearth/clear-docker-images"
+  LABEL org.opencontainers.image.source=&quot;https://gitea.antoine-langlois.net/DataHearth/clear-docker-images&quot;
 
   COPY +build-linux/x86_64-unknown-linux-musl/release/clear-docker-images /usr/local/bin/clear-docker-images
 
@@ -34,5 +34,5 @@ build-images:
 
   SAVE IMAGE --push ${DOCKER_IMG}:${VERSION}
   SAVE IMAGE --push ${DOCKER_IMG}:latest
-  SAVE IMAGE --push ${GHCR_IMG}:${VERSION}
-  SAVE IMAGE --push ${GHCR_IMG}:latest
+  SAVE IMAGE --push ${GITEA_IMG}:${VERSION}
+  SAVE IMAGE --push ${GITEA_IMG}:latest
