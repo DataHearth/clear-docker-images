@@ -1,141 +1,99 @@
-use chrono::NaiveDateTime;
-use log::{error, warn};
-use serde::{self, Deserialize, Deserializer};
-use std::process::{exit, Command};
+use bollard::image::ListImagesOptions;
+use bollard::models::ImageSummary;
+use bollard::Docker;
+use bollard::API_DEFAULT_VERSION;
+use log::info;
+use std::collections::HashMap;
 
 use crate::DateArgs;
-use crate::DOCKER_BIN;
 
 const GHCR_REPO: &str = "ghcr.io/datahearth/clear-docker-images";
 const DOCKER_REPO: &str = "datahearth/clear-docker-images";
 
-#[derive(Deserialize, Debug)]
-struct Image {
-    // image ID
-    #[serde(rename = "ID")]
-    id: String,
-    // image repository
-    #[serde(rename = "Repository")]
-    repository: String,
-    // image tag
-    #[serde(rename = "Tag")]
-    tag: String,
-    // image creation date as UNIX timestamp
-    #[serde(deserialize_with = "deserialize_creation_date", rename = "CreatedAt")]
-    created_at: i64,
-    // image size in MB
-    #[serde(deserialize_with = "deserialize_size", rename = "Size")]
-    size: f32,
-}
-
-pub fn deserialize_creation_date<'de, D>(deserializer: D) -> Result<i64, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let date = String::deserialize(deserializer)?;
-
-    // format => 2021-01-01 00:00:00 +0100 CET
-    NaiveDateTime::parse_from_str(&date, "%Y-%m-%d %H:%M:%S %z %Z")
-        .map(|d| d.timestamp())
-        .map_err(serde::de::Error::custom)
-}
-
-pub fn deserialize_size<'de, D>(deserializer: D) -> Result<f32, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let size = String::deserialize(deserializer)?;
-
-    if size.contains("KB") {
-        size.replace("KB", "")
-            .parse::<f32>()
-            .map(|s| s / 1000.0)
-            .map_err(serde::de::Error::custom)
-    } else if size.contains("MB") {
-        size.replace("MB", "")
-            .parse::<f32>()
-            .map_err(serde::de::Error::custom)
-    } else if size.contains("GB") {
-        size.replace("GB", "")
-            .parse::<f32>()
-            .map(|s| s * 1000.0)
-            .map_err(serde::de::Error::custom)
-    } else {
-        Err(serde::de::Error::custom(format!(
-            "Unknown size identification: {}",
-            size,
-        )))
-    }
-}
-
-pub fn process_imgs(
+pub struct DockerActions {
+    docker: Docker,
     repository: Option<String>,
     tags: Vec<String>,
-    timestamps: DateArgs,
-) -> (Vec<String>, f32) {
-    let mut ids = vec![];
-    let mut saved_size = 0.0;
-
-    for img in parse_imgs(repository) {
-        let image: Image = serde_json::from_str(&img).unwrap();
-        let del = timestamps
-            .stop
-            .map_or(timestamps.start > image.created_at, |stop| {
-                timestamps.start > image.created_at && image.created_at > stop
-            });
-
-        if del && (image.repository != GHCR_REPO && image.repository != DOCKER_REPO) {
-            if !tags.contains(&image.tag) {
-                ids.push(image.id);
-
-                saved_size += image.size
-            }
-        }
-    }
-
-    return (ids, saved_size);
+    date: DateArgs,
 }
 
-fn get_images(repo: Option<String>) -> Vec<u8> {
-    let mut cmd = Command::new(DOCKER_BIN);
-    cmd.arg("images");
+impl DockerActions {
+    pub fn new(
+        socket: String,
+        repository: Option<String>,
+        tags: Vec<String>,
+        date: DateArgs,
+    ) -> Self {
+        Self {
+            docker: Docker::connect_with_socket(&socket, 120, API_DEFAULT_VERSION).unwrap(),
+            repository,
+            tags,
+            date,
+        }
+    }
 
-    repo.map(|repo| cmd.arg(repo));
+    pub async fn get(&self) -> Result<Vec<ImageSummary>, bollard::errors::Error> {
+        let mut image_filters = HashMap::new();
 
-    cmd.args(["--format", "{{json .}}"]);
+        // why using &self.repository instead of selft.repository ?
+        if let Some(r) = &self.repository {
+            image_filters.insert("reference", vec![r.as_str()]);
+        }
 
-    match cmd.output() {
-        Ok(o) => {
-            if !o.status.success() {
-                error!(
-                    "{}",
-                    std::str::from_utf8(&o.stderr).expect("failed to parse STDERR to UTF-8")
-                );
-                error!("failed to retrieve docker images. Please checkout STDERR");
-                exit(1);
+        self.docker
+            .list_images(Some(ListImagesOptions {
+                all: true,
+                filters: image_filters,
+                ..Default::default()
+            }))
+            .await
+    }
+
+    pub async fn delete(
+        &self,
+        images: Vec<ImageSummary>,
+        dry_run: bool,
+    ) -> Result<i64, bollard::errors::Error> {
+        let mut removed_size = 0;
+        for image in images {
+            info!("deleting: {}", image.id);
+
+            if !dry_run {
+                if let Err(e) = self.docker.delete_service(&image.id).await {
+                    return Err(e);
+                }
             }
 
-            o.stdout
+            removed_size += image.size;
         }
-        Err(e) => {
-            error!("docker command failed: {}", e);
-            exit(1);
-        }
-    }
-}
 
-fn parse_imgs(repository: Option<String>) -> Vec<String> {
-    let stdout = get_images(repository);
-
-    let output = String::from_utf8(stdout).unwrap_or_else(|e| {
-        error!("failed to parse docker output: {}", e);
-        exit(1);
-    });
-    let images: Vec<String> = output.lines().map(|s| s.to_string()).collect();
-
-    if images.len() == 0 {
-        warn!("No images found for current timestamp and/or repository");
+        Ok(removed_size)
     }
 
-    return images;
+    pub fn filter(&self, images: Vec<ImageSummary>) -> Vec<ImageSummary> {
+        let mut to_be_deleted: Vec<ImageSummary> = vec![];
+
+        for image in images {
+            if self
+                .date
+                .stop
+                .map_or(self.date.start > image.created, |stop| {
+                    self.date.start > image.created && image.created > stop
+                })
+                && image.repo_tags.iter().any(|tag| {
+                    !tag.contains(GHCR_REPO)
+                        && !tag.contains(DOCKER_REPO)
+                        && self
+                            .tags
+                            .iter()
+                            .any(|excluded_tag| !tag.contains(excluded_tag))
+                })
+            {
+                println!("{:?}", self.tags);
+                to_be_deleted.push(image);
+            }
+        }
+
+        return to_be_deleted;
+    }
 }
