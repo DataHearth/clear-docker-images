@@ -57,6 +57,9 @@ OPTIONS:
         --dry-run
             image cleanup will not be triggered [default: false]
 
+    -f, --force
+            should force image deletion [default: false]
+
     -h, --help
             Print help information
 
