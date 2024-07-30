@@ -34,33 +34,38 @@ cargo install --path .
 clear-docker-images <OPTIONS>
 ```
 
-## Flags
+## Options
 
 ```bash
-  -d, --date <DATE>
-          filter by date.
+USAGE:
+    clear-docker-images [OPTIONS] [REPOSITORY]
 
-          Can filter by a minimum age $DATE or from $FROM|$TO (format example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
-          [default: $NOW - 2 days]
+ARGS:
+    <REPOSITORY>
+            filter by repository name
 
-      --dry-run
-          image cleanup will not be triggered [default: false]
+OPTIONS:
+    -d, --date <DATE>
+            filter by date.
 
-      --force
-          force image removal [default: false]
+            Can filter by a minimum age $DATE or from $START|$STOP (format example: YYYY-MM-DD or
+            YYYY-MM-DDTHH:MM:SS) [default: $NOW - 2d]
 
-  -h, --help
-          Print help information
+        --dry-run
+            image cleanup will not be triggered [default: false]
 
-  -r, --repository <REPOSITORY>
-          filter by repository name
+        --force
+            force image removal [default: false]
 
-  -t, --tags <TAGS>
-          add tags exclusion
+    -h, --help
+            Print help information
 
-  -v, --verbose
-          add more logs [default: false]
+    -t, --tags <TAGS>
+            add tags exclusion
 
-  -V, --version
-          Print version information
+    -v, --verbose
+            add more logs [default: false]
+
+    -V, --version
+            Print version information
 ```
