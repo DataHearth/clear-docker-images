@@ -11,11 +11,10 @@ WORKDIR /clear-docker-images
 build-linux:
   COPY . .
 
-  RUN rustup target add x86_64-unknown-linux-gnu
   RUN rustup target add x86_64-unknown-linux-musl
 	
-  RUN cargo build --release --target x86_64-unknown-linux-gnu
-	RUN cargo build --release --target x86_64-unknown-linux-musl
+  RUN cargo build --release --all-features --target x86_64-unknown-linux-gnu
+	RUN cargo build --release --all-features --target x86_64-unknown-linux-musl
   
   SAVE ARTIFACT target/x86_64-unknown-linux-gnu /x86_64-unknown-linux-gnu AS LOCAL target/x86_64-unknown-linux-gnu
   SAVE ARTIFACT target/x86_64-unknown-linux-musl /x86_64-unknown-linux-musl AS LOCAL target/x86_64-unknown-linux-musl
