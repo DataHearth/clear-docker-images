@@ -33,7 +33,7 @@ build-images:
 
   ENTRYPOINT ["clear-docker-images"]
 
-  SAVE IMAGE ${DOCKER_IMG}:${VERSION}
-  SAVE IMAGE ${DOCKER_IMG}:latest
-  SAVE IMAGE ${GHCR_IMG}:${VERSION}
-  SAVE IMAGE ${GHCR_IMG}:latest
+  SAVE IMAGE --push ${DOCKER_IMG}:${VERSION}
+  SAVE IMAGE --push ${DOCKER_IMG}:latest
+  SAVE IMAGE --push ${GHCR_IMG}:${VERSION}
+  SAVE IMAGE --push ${GHCR_IMG}:latest

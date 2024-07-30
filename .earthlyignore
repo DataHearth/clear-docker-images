@@ -6,3 +6,4 @@ Earthfile
 .gitignore
 .git
 .env
+.github
