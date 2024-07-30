@@ -17,13 +17,21 @@ const DAYS_RM: u32 = 2;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// repository name
+    /// filter by repository name
     #[clap(short, long)]
     repository: Option<String>,
+
+    /// add tags exclusion
+    #[clap(short, long)]
+    tags: Option<Vec<String>>,
 
     /// image cleanup will not be triggered
     #[clap(long, takes_value = false)]
     dry_run: bool,
+
+    /// should docker force image removal (it may create orphan images)
+    #[clap(long, takes_value = false)]
+    force: bool,
 }
 
 #[derive(Deserialize, Debug)]
@@ -32,6 +40,8 @@ struct Image {
     created_at: DateTime<FixedOffset>,
     #[serde(rename = "ID")]
     id: String,
+    #[serde(rename = "Tag")]
+    tag: String,
 }
 
 fn main() {
@@ -69,24 +79,29 @@ fn main() {
     }
 
     let now = Utc::now();
-    let day = now.day();
-    let month = now.month();
-    let year = now.year();
 
-    let past_date = get_past_date(year, month, day, DAYS_RM).and_hms(1, 0, 0);
+    let past_date = get_past_date(now.year(), now.month(), now.day(), DAYS_RM).and_hms(1, 0, 0);
+    let tags = if let Some(t) = args.tags { t } else { vec![] };
     let mut ids = vec![];
 
     for img in images {
         let image: Image = serde_json::from_str(img).unwrap();
         if image.created_at.timestamp() <= past_date.timestamp() {
-            ids.push(image.id);
+            if !tags.contains(&image.tag) {
+                ids.push(image.id);
+            }
         }
     }
 
     if args.dry_run {
         println!("dry run activated");
     } else {
-        match Command::new(DOCKER_BIN)
+        let mut cmd = Command::new(DOCKER_BIN);
+        if args.force {
+            cmd.arg("-f");
+        }
+
+        match cmd
             .args(DOCKER_RMI_CMD)
             .args(&ids)
             .stdout(Stdio::null())
