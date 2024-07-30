@@ -1,6 +1,7 @@
 use chrono::{Date, DateTime, Datelike, FixedOffset, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use serde::{self, Deserialize, Deserializer};
 use std::{num::TryFromIntError, process::exit};
+use log::error;
 
 pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<FixedOffset>, D::Error>
 where
@@ -25,7 +26,7 @@ fn get_day_month(year: i32, month: u32) -> u32 {
             .num_days(),
     )
     .unwrap_or_else(|_: TryFromIntError| {
-        eprintln!("failed to convert i64 to u32");
+        error!("failed to convert i64 to u32");
         exit(1);
     })
 }
@@ -44,7 +45,7 @@ pub fn get_past_date(mut year: i32, mut month: u32, mut day: u32, day_remove: u3
             2 => new_day,
             1 => new_day - 1,
             _ => {
-                eprintln!("invalid day in condition...");
+                error!("invalid day in condition...");
                 exit(1)
             }
         }
@@ -74,14 +75,14 @@ pub fn parse_date(date: Option<String>) -> (DateTime<Utc>, Option<DateTime<Utc>>
             };
 
             let base_from = NaiveDateTime::parse_from_str(&base_from, "%FT%T").unwrap_or_else(|e| {
-                eprintln!(
+                error!(
                     "failed to parse from date. Verify its format (example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS): {}",
                     e
                 );
                 exit(1);
             });
             let base_to = NaiveDateTime::parse_from_str(&base_to, "%FT%T").unwrap_or_else(|e| {
-                eprintln!(
+                error!(
                     "failed to parse to date. Verify its format (example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS): {}",
                     e
                 );
@@ -94,7 +95,7 @@ pub fn parse_date(date: Option<String>) -> (DateTime<Utc>, Option<DateTime<Utc>>
 
             let date = NaiveDateTime::parse_from_str(&formatted_date, "%FT%T")
                 .unwrap_or_else(|e| {
-                    eprintln!(
+                    error!(
                     "failed to parse date. Verify its format (example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS): {}",
                     e
                 );
