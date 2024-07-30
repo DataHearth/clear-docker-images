@@ -18,8 +18,9 @@ docker run --name clear-docker-image -v /var/run/docker.sock:/var/run/docker.soc
 mkdir -p $HOME/.local/bin
 export PATH=$PATH:$HOME/.local/bin
 
-# Available distribution: linux | darwin
-wget -o $HOME/.local/bin/clear-docker-images ~/. https://github.com/DataHearth/clear-docker-images/releases/download/<VERSION>/x86_x64-<DISTRIBUTION>-clear-docker-images
+# Available binaries:
+# x86_64-unknown-linux-gnu | x86_64-unknown-linux-musl | x86_64-apple-darwin
+wget -o $HOME/.local/bin/clear-docker-images ~/. https://github.com/DataHearth/clear-docker-images/releases/download/<VERSION>/<BINARY>
 
 clear-docker-images <OPTIONS>
 ```
