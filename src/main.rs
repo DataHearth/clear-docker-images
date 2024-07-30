@@ -42,7 +42,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    let tags = if let Some(t) = args.tags { t } else { vec![] };
+    let tags = args.tags.map_or(vec![], |tags| tags);
     let (ids, saved_size) = process_imgs(args.repository, tags, args.date);
 
     if args.dry_run {

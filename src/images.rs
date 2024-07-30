@@ -31,21 +31,13 @@ pub fn process_imgs(
 
     for img in parse_imgs(repository) {
         let image: Image = serde_json::from_str(&img).unwrap();
-        let del = if let Some(max) = date_to {
-            if image.created_at.timestamp() >= date_from.timestamp()
-                && image.created_at.timestamp() <= max.timestamp()
-            {
-                true
-            } else {
-                false
-            }
-        } else {
-            if image.created_at.timestamp() >= date_from.timestamp() {
-                true
-            } else {
-                false
-            }
-        };
+        let del = date_to.map_or(
+            image.created_at.timestamp() >= date_from.timestamp(),
+            |max| {
+                date_from.timestamp() >= image.created_at.timestamp()
+                    && max.timestamp() <= image.created_at.timestamp()
+            },
+        );
 
         if del {
             if !tags.contains(&image.tag) {
@@ -86,16 +78,17 @@ fn get_images(repo: Option<String>) -> Vec<u8> {
     let mut cmd = Command::new(DOCKER_BIN);
     cmd.arg("images");
 
-    if let Some(repo) = repo {
-        cmd.arg(repo);
-    }
+    repo.map(|repo| cmd.arg(repo));
 
     cmd.args(["--format", "{{json .}}"]);
 
     match cmd.output() {
         Ok(o) => {
             if !o.status.success() {
-                eprintln!("{}", std::str::from_utf8(&o.stderr).unwrap());
+                eprintln!(
+                    "{}",
+                    std::str::from_utf8(&o.stderr).expect("failed to parse STDERR to UTF-8")
+                );
                 eprintln!("failed to retrieve docker images. Please checkout STDERR");
                 exit(1);
             }

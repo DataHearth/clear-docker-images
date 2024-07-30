@@ -1,0 +1,8 @@
+LICENSE
+README.md
+target
+Makefile
+Earthfile
+.gitignore
+.git
+.env
