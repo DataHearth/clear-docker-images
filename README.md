@@ -12,6 +12,8 @@ By default, `clear-docker-images` will select images that are older than 2 days 
 docker run --name clear-docker-image -v /var/run/docker.sock:/var/run/docker.sock ghcr.io/datahearth/clear-docker-images <OPTIONS>
 ```
 
+*N.B: Since v0.5.0, container images switched from the Docker alpine docker-in-docker image to Debian 11 distroless. I recommand switching to v0.5.0 for a significant size gain (around x20 in term of image size => 230MB).*
+
 ### Binary
 
 ```bash
@@ -32,7 +34,7 @@ git clone https://github.com/DataHearth/clear-docker-images.git
 cd clear-docker-images
 cargo install --path .
 
-clear-docker-images <OPTIONS>
+clear-docker-images <REPOSITORY> <OPTIONS>
 ```
 
 ## Options
@@ -55,17 +57,16 @@ OPTIONS:
         --dry-run
             image cleanup will not be triggered [default: false]
 
-        --force
-            force image removal [default: false]
-
     -h, --help
             Print help information
 
+    -s, --socket <SOCKET>
+            where is located the docker socket (can be a UNIX socket or TCP protocol)
+
+            [default: /var/run/docker.sock]
+
     -t, --tags <TAGS>
             add tags exclusion
-
-    -v, --verbose
-            add more logs [default: false]
 
     -V, --version
             Print version information
