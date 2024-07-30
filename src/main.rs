@@ -1,14 +1,10 @@
 mod date;
+mod images;
 
-use chrono::{DateTime, Datelike, FixedOffset, NaiveDateTime, Utc};
 use clap::Parser;
-use date::get_past_date;
-use serde::Deserialize;
-use serde_json;
-use std::{
-    num::ParseFloatError,
-    process::{exit, Command, Stdio},
-};
+use std::process::{Command, Stdio};
+
+use crate::images::process_imgs;
 
 const DOCKER_BIN: &str = "docker";
 
@@ -43,142 +39,11 @@ struct Args {
     verbose: bool,
 }
 
-#[derive(Deserialize, Debug)]
-struct Image {
-    #[serde(with = "date", rename = "CreatedAt")]
-    created_at: DateTime<FixedOffset>,
-    #[serde(rename = "ID")]
-    id: String,
-    #[serde(rename = "Tag")]
-    tag: String,
-    #[serde(rename = "Size")]
-    size: String,
-}
-
 fn main() {
     let args = Args::parse();
 
-    let stdout = get_images(args.repository);
-
-    let s_data = std::str::from_utf8(&stdout).unwrap();
-    let mut images: Vec<&str> = s_data.split("\n").collect();
-    // * remove last empty line
-    images.remove(images.len() - 1);
-
-    if images.len() == 0 {
-        println!("No images found for current timestamp and/or repository");
-        return;
-    }
-
-    let min: DateTime<Utc>;
-    let mut max_opt: Option<DateTime<Utc>> = None;
-    let now = Utc::now();
-    if let Some(date) = args.date {
-        if date.contains("|") {
-            let dates: Vec<&str> = date.split("|").collect();
-            let base_from = if dates[0].contains("T") {
-                dates[0].to_string()
-            } else {
-                format!("{}T00:00:00", dates[0])
-            };
-            let base_to = if dates[1].contains("T") {
-                dates[1].to_string()
-            } else {
-                format!("{}T00:00:00", dates[1])
-            };
-
-            let base_from = NaiveDateTime::parse_from_str(&base_from, "%FT%T").unwrap_or_else(|e| {
-                eprintln!(
-                    "failed to parse from date. Verify its format (example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS): {}",
-                    e
-                );
-                exit(1);
-            });
-            let base_to = NaiveDateTime::parse_from_str(&base_to, "%FT%T").unwrap_or_else(|e| {
-                eprintln!(
-                    "failed to parse to date. Verify its format (example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS): {}",
-                    e
-                );
-                exit(1);
-            });
-            min = DateTime::<Utc>::from_utc(base_from, Utc);
-            max_opt = Some(DateTime::<Utc>::from_utc(base_to, Utc));
-        } else {
-            let formatted_date = if date.contains("T") {
-                date
-            } else {
-                date + "T00:00:00"
-            };
-
-            let date = NaiveDateTime::parse_from_str(&formatted_date, "%FT%T")
-                .unwrap_or_else(|e| {
-                    eprintln!(
-                    "failed to parse date. Verify its format (example: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS): {}",
-                    e
-                );
-                    exit(1);
-                });
-
-            min = DateTime::<Utc>::from_utc(date, Utc);
-        }
-    } else {
-        min = get_past_date(now.year(), now.month(), now.day(), 2).and_hms(1, 0, 0);
-    };
-
     let tags = if let Some(t) = args.tags { t } else { vec![] };
-    let mut ids = vec![];
-    let mut saved_size: f32 = 0.0;
-
-    for img in images {
-        let image: Image = serde_json::from_str(img).unwrap();
-        let del;
-        if let Some(max) = max_opt {
-            del = if image.created_at.timestamp() <= min.timestamp()
-                && image.created_at.timestamp() >= max.timestamp()
-            {
-                true
-            } else {
-                false
-            }
-        } else {
-            del = if image.created_at.timestamp() <= min.timestamp() {
-                true
-            } else {
-                false
-            }
-        }
-
-        if del {
-            if !tags.contains(&image.tag) {
-                ids.push(image.id);
-
-                saved_size += if image.size.contains("KB") {
-                    image
-                        .size
-                        .replace("KB", "")
-                        .parse::<f32>()
-                        .unwrap_or_else(failed_convert_size)
-                        / 1000 as f32
-                } else if image.size.contains("MB") {
-                    image
-                        .size
-                        .replace("MB", "")
-                        .parse::<f32>()
-                        .unwrap_or_else(failed_convert_size)
-                } else if image.size.contains("GB") {
-                    image
-                        .size
-                        .replace("GB", "")
-                        .parse::<f32>()
-                        .unwrap_or_else(failed_convert_size)
-                        * 1000 as f32
-                } else {
-                    eprintln!("Unknown size identification: {}", image.size);
-                    exit(1);
-                }
-            }
-        }
-    }
+    let (ids, saved_size) = process_imgs(args.repository, tags, args.date);
 
     if args.dry_run {
         println!("dry run activated");
@@ -223,36 +88,4 @@ fn main() {
             format!("{:.2}MB", saved_size)
         }
     );
-}
-
-fn get_images(repo: Option<String>) -> Vec<u8> {
-    let mut cmd = Command::new(DOCKER_BIN);
-    cmd.arg("images");
-
-    if let Some(repo) = repo {
-        cmd.arg(repo);
-    }
-
-    cmd.args(["--format", "{{json .}}"]);
-
-    match cmd.output() {
-        Ok(o) => {
-            if !o.status.success() {
-                eprintln!("{}", std::str::from_utf8(&o.stderr).unwrap());
-                eprintln!("failed to retrieve docker images. Please checkout STDERR");
-                exit(1);
-            }
-
-            o.stdout
-        }
-        Err(e) => {
-            eprintln!("docker command failed: {}", e);
-            exit(1);
-        }
-    }
-}
-
-fn failed_convert_size(e: ParseFloatError) -> f32 {
-    eprintln!("failed to convert \"String\" to \"f32\": {}", e);
-    exit(1);
 }
